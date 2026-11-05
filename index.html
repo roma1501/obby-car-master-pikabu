@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Машина в небе: полоса препятствий</title>
+    <link rel="icon" type="image/png" href="assets/ui/favicon.png">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #222;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        input, textarea, [contenteditable] { -webkit-user-select: text; user-select: text; }
+        /* ПК с ультрашироким окном: поле игры не шире 2:1, по бокам — поля (класс ставит Game.js на Playgama) */
+        @media (min-aspect-ratio: 2/1) and (hover: hover) and (pointer: fine) {
+            html.aspect-2x1 body { width: 200vh; margin: 0 auto; position: relative; transform: translateZ(0); }
+        }
+        img { -webkit-user-drag: none; }
+        #world3d {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            outline: none;
+            touch-action: none;
+        }
+        @font-face { font-family: 'Montserrat'; src: url('assets/fonts/montserrat.ttf?v=1.0.2-aac24169') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+        :root {
+            /* «Ночной автодром»: асфальт, гоночный оранжевый, электро-циан, лайм, сигнальный жёлтый, красный. Имена переменных прежние — меняются только значения. */
+            --bo-dark: #12141c; --bo-asphalt: #1c2030; --bo-ink: #05060a; --bo-edge: rgba(255,255,255,.3);
+            --bo-purple: #5b6788; --bo-orange: #ff6b1a; --bo-green: #b6ff3b;
+            --bo-yellow: #ffd600; --bo-red: #ff2d55; --bo-sky: #1ee3ff; --bo-pink: #ff4f8b; --bo-white: #ffffff;
+            --bo-font: 'Montserrat', 'Arial Black', system-ui, sans-serif;
+            /* карбон и «hazard»-полоса — только CSS, без картинок */
+            --bo-carbon: repeating-linear-gradient(45deg, rgba(255,255,255,.045) 0 2px, transparent 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,.3) 0 2px, transparent 2px 4px), linear-gradient(180deg, #252a44 0%, #161a2a 100%);
+            --bo-hazard: repeating-linear-gradient(-45deg, #ffd600 0 9px, #12141c 9px 18px);
+            --bo-outline: -1px 0 0 var(--bo-ink), 1px 0 0 var(--bo-ink), 0 -1px 0 var(--bo-ink), 0 1px 0 var(--bo-ink), 1px 2px 0 var(--bo-ink), 2px 3px 0 var(--bo-ink), 3px 4px 0 var(--bo-ink), 4px 5px 0 var(--bo-ink), 0 7px 12px rgba(0,0,0,.5);
+            --bo-outline-thin: -1px 0 0 var(--bo-ink), 1px 0 0 var(--bo-ink), 0 -1px 0 var(--bo-ink), 0 1px 0 var(--bo-ink), 1px 2px 0 var(--bo-ink), 0 3px 5px rgba(0,0,0,.45);
+            --tut-font: var(--bo-font); --tut-bg: rgba(18,20,28,.94); --tut-fg: #ffffff; --tut-accent: #b6ff3b; --tut-border: #1ee3ff; --tut-radius: 6px;
+        }
+        * { -webkit-tap-highlight-color: transparent; }
+        /* Шрифт игры — Montserrat Black: у всего интерфейса (окна, всплывающие надписи, обучение, кнопки ввода) */
+        body, button, input, select { font-family: var(--bo-font); }
+        body { font-weight: 800; }
+        body * { font-synthesis: none; -webkit-font-smoothing: antialiased; }
+        /* Общие классы интерфейса игры: скошенная кнопка-параллелограмм (металлик + карбон + гоночная полоса), панель с угловыми срезами,
+           hazard-лента, шахматка (только финиш), табличка-номер. Форма кнопки — в ::before, поэтому текст остаётся прямым. */
+        .bo-btn { --c: var(--bo-green); position: relative; isolation: isolate; display: inline-flex; align-items: center; justify-content: center; gap: .4em;
+            min-height: 44px; padding: .5em 1.4em; border: 0; border-radius: 0; background: none; color: #fff; font: 900 17px/1.1 var(--bo-font);
+            text-shadow: var(--bo-outline-thin); letter-spacing: .03em; cursor: pointer; user-select: none;
+            transform: translateY(0); transition: transform .08s, filter .15s; touch-action: manipulation; }
+        .bo-btn::before { content: ''; position: absolute; inset: 0; z-index: -1; transform: skewX(-11deg); border-radius: 5px; border: 2px solid rgba(255,255,255,.62);
+            background-color: var(--c);
+            background-image: linear-gradient(105deg, transparent 38%, rgba(255,255,255,.6) 50%, transparent 62%), linear-gradient(180deg, rgba(255,255,255,.44) 0%, rgba(255,255,255,.08) 48%, rgba(0,0,0,.2) 100%),
+                repeating-linear-gradient(45deg, rgba(0,0,0,.1) 0 2px, transparent 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,.1) 0 2px, transparent 2px 4px);
+            background-size: 260% 100%, auto, auto, auto; background-position: 140% 0, 0 0, 0 0, 0 0; background-repeat: no-repeat, no-repeat, repeat, repeat;
+            box-shadow: 0 0 0 2px var(--bo-ink), 0 5px 0 2px var(--bo-ink), inset 0 -3px 0 rgba(0,0,0,.25);
+            transition: box-shadow .08s, background-position .5s ease-out, filter .15s; }
+        /* гоночная полоса: две тонкие наклонные линии у левого края */
+        .bo-btn::after { content: ''; position: absolute; z-index: -1; left: 9px; top: 4px; bottom: 4px; width: 11px; transform: skewX(-11deg); pointer-events: none;
+            background: linear-gradient(90deg, rgba(255,255,255,.55) 0 3px, transparent 3px 6px, rgba(255,255,255,.32) 6px 9px, transparent 9px); }
+        .bo-btn:hover::before { filter: brightness(1.1); background-position: -40% 0, 0 0, 0 0, 0 0; }
+        .bo-btn:active { transform: translateY(3px); }
+        .bo-btn:active::before { box-shadow: 0 0 0 2px var(--bo-ink), 0 2px 0 2px var(--bo-ink), inset 0 -2px 0 rgba(0,0,0,.25); background-position: -40% 0, 0 0, 0 0, 0 0; }
+        .bo-btn[disabled], .bo-btn.is-off { cursor: default; }
+        .bo-btn[disabled]::before, .bo-btn.is-off::before { filter: grayscale(.85) brightness(.7); }
+        .bo-btn.is-off:active, .bo-btn[disabled]:active { transform: none; }
+        .bo-btn.is-off:active::before, .bo-btn[disabled]:active::before { box-shadow: 0 0 0 2px var(--bo-ink), 0 5px 0 2px var(--bo-ink), inset 0 -3px 0 rgba(0,0,0,.25); }
+        .bo-btn.round { width: 50px; height: 50px; min-height: 0; padding: 0; border-radius: 0; font-size: 22px; }
+        .bo-btn.round::before { border-radius: 6px; }
+        .bo-btn.round::after { display: none; }
+        .bo-btn .bo-ico { width: 1.2em; height: 1.2em; display: inline-block; flex: none; }
+        /* на светлых акцентах (циан, лайм, жёлтый, оранжевый) буквы тёмные, на тёмных — светлые: цвет считается от --c */
+        @supports (color: oklch(from red l c h)) {
+            .bo-btn { color: oklch(from var(--c) clamp(.1, (.64 - l) * 99, .98) 0 0); text-shadow: 0 1px 0 oklch(from var(--c) clamp(0, (l - .58) * 99, 1) 0 0 / .5); }
+        }
+        .bo-panel { --cut: 16px; --hc: #1ee3ff; position: relative; isolation: isolate; padding: 3px; color: #e9eefc; font: 800 16px var(--bo-font);
+            background: linear-gradient(125deg, var(--hc) 0%, rgba(255,255,255,.55) 48%, var(--hc) 100%);
+            clip-path: polygon(var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)); }
+        .bo-panel::before { content: ''; position: absolute; inset: 3px; z-index: -1; background-color: var(--bo-asphalt); background-image: var(--bo-carbon);
+            clip-path: polygon(calc(var(--cut) - 2px) 0, calc(100% - var(--cut) + 2px) 0, 100% calc(var(--cut) - 2px), 100% calc(100% - var(--cut) + 2px), calc(100% - var(--cut) + 2px) 100%, calc(var(--cut) - 2px) 100%, 0 calc(100% - var(--cut) + 2px), 0 calc(var(--cut) - 2px)); }
+        .bo-checker { background-color: #fff; background-image: linear-gradient(45deg, var(--bo-ink) 25%, transparent 25%, transparent 75%, var(--bo-ink) 75%),
+            linear-gradient(45deg, var(--bo-ink) 25%, transparent 25%, transparent 75%, var(--bo-ink) 75%);
+            background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+        .bo-hazard { background: var(--bo-hazard); }
+        .bo-title { font: 900 clamp(26px, 5vw, 42px)/1.05 var(--bo-font); color: #fff; text-transform: uppercase; font-style: italic; font-synthesis: style; text-shadow: var(--bo-outline); letter-spacing: .01em; }
+        /* табличка-номер: белая плашка с тёмной рамкой и синей полосой слева */
+        .bo-bib { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 16px; background: #f4f6fb; color: var(--bo-dark); border: 3px solid var(--bo-dark);
+            border-left: 9px solid #1e4fd6; border-radius: 5px; font: 900 15px var(--bo-font); letter-spacing: .05em; box-shadow: inset 0 0 0 2px #f4f6fb, 0 3px 0 var(--bo-ink); }
+        .bo-outline { text-shadow: var(--bo-outline); color: #fff; }
+        #loading-screen {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+            overflow: hidden;
+            background: radial-gradient(120% 90% at 50% 0%, #2b3358 0%, #161a2a 52%, #07080d 100%);
+            z-index: 1000;
+        }
+        #loading-screen::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .55;
+            background: repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 2px, transparent 2px 36px), linear-gradient(180deg, transparent 58%, rgba(255,107,26,.16) 100%); }
+        .loading-text { font: 800 14px var(--bo-font); color: #aeb9d6; text-align: center; min-height: 1em; letter-spacing: .08em; text-transform: uppercase; }
+        .loading-bar { position: relative; width: min(320px, 72vw); height: 20px; background: #0a0c13; border: 2px solid rgba(255,255,255,.4); border-radius: 4px; overflow: hidden;
+            transform: skewX(-11deg); box-shadow: 0 0 0 2px var(--bo-ink), 0 5px 0 2px var(--bo-ink); }
+        .loading-progress { height: 100%; width: 0%; background: repeating-linear-gradient(-45deg, #ff6b1a 0 11px, #ffd600 11px 22px); background-size: 31px 100%; transition: width 0.3s ease; animation: bo-stripes .7s linear infinite; }
+        @keyframes bo-stripes { to { background-position: 31px 0; } }
+        #loading-title { margin: 0; font: 900 clamp(30px, 7vw, 60px)/1.05 var(--bo-font); color: #fff; text-align: center; max-width: 92vw; text-transform: uppercase; font-style: italic; font-synthesis: style;
+            text-shadow: -1px 0 0 var(--bo-ink), 1px 0 0 var(--bo-ink), 0 -1px 0 var(--bo-ink), 2px 3px 0 var(--bo-ink), 4px 5px 0 var(--bo-orange), 5px 6px 0 var(--bo-ink), 0 8px 16px rgba(0,0,0,.6); letter-spacing: .01em; }
+        /* дорожка с машиной: разметка бежит под колёсами, скоростные линии сзади */
+        .loading-lane { position: relative; width: min(460px, 90vw); display: flex; justify-content: center; padding-bottom: 14px; }
+        .loading-lane::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 12px; border-block: 3px solid rgba(255,255,255,.55); background: #0b0d14; }
+        .loading-lane::after { content: ''; position: absolute; left: 0; right: 0; bottom: 4px; height: 4px; opacity: .9;
+            background: repeating-linear-gradient(90deg, #ffd600 0 34px, transparent 34px 68px); animation: bo-road .55s linear infinite; }
+        @keyframes bo-road { to { background-position: -68px 0; } }
+        .loading-car { position: relative; width: clamp(130px, 26vh, 230px); height: auto; margin-bottom: 6px; animation: bo-roll 1.2s ease-in-out infinite alternate; filter: drop-shadow(0 6px 0 rgba(0,0,0,.45)); }
+        .loading-streaks { position: absolute; left: 0; width: 38%; top: 18%; height: 56%; pointer-events: none; opacity: .75;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.8)) 0 12% / 70% 3px no-repeat, linear-gradient(90deg, transparent, rgba(30,227,255,.9)) 0 42% / 100% 3px no-repeat,
+                linear-gradient(90deg, transparent, rgba(255,255,255,.7)) 20% 68% / 60% 3px no-repeat, linear-gradient(90deg, transparent, rgba(255,107,26,.9)) 0 92% / 85% 3px no-repeat;
+            animation: bo-streak .6s linear infinite alternate; }
+        @keyframes bo-streak { from { transform: translateX(-14px); opacity: .45; } to { transform: translateX(6px); opacity: .85; } }
+        @keyframes bo-roll { from { transform: translateX(-8px) rotate(-1.5deg); } to { transform: translateX(8px) rotate(1.5deg); } }
+        .loading-car .w { transform-box: fill-box; transform-origin: center; animation: bo-spin .6s linear infinite; }
+        @keyframes bo-spin { to { transform: rotate(360deg); } }
+        #loading-percent { font: 900 20px var(--bo-font); color: var(--bo-sky); text-shadow: 0 0 .6em rgba(30,227,255,.65), 0 2px 0 var(--bo-ink); letter-spacing: .06em; font-variant-numeric: tabular-nums; }
+        #loading-retry { position: relative; isolation: isolate; padding: 12px 28px; border: 0; background: none; color: var(--bo-dark); font: 900 18px var(--bo-font); cursor: pointer; letter-spacing: .03em; }
+        #loading-retry::before { content: ''; position: absolute; inset: 0; z-index: -1; transform: skewX(-11deg); border-radius: 5px; border: 2px solid rgba(255,255,255,.62); background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(0,0,0,.18)), var(--bo-green);
+            box-shadow: 0 0 0 2px var(--bo-ink), 0 5px 0 2px var(--bo-ink); }
+    </style>
+</head>
+<body>
+    <canvas id="world3d"></canvas>
+    <div id="loading-screen" role="status" aria-busy="true" aria-live="polite">
+        <div class="loading-lane"><i class="loading-streaks"></i>
+        <svg class="loading-car" viewBox="0 0 240 120" aria-hidden="true">
+            <g stroke="#05060a" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+                <path d="M14 78c0-14 6-22 20-25l34-7 26-22c6-5 13-7 21-7h46c9 0 16 3 22 9l20 20 22 4c10 2 16 9 16 19v9c0 5-4 9-9 9H23c-5 0-9-4-9-9z" fill="#ff6b1a"/>
+                <path d="M84 46l22-19c4-3 8-4 13-4h18v23z" fill="#b6f6ff"/>
+                <path d="M146 23h12c6 0 11 2 15 6l17 17h-44z" fill="#b6f6ff"/>
+                <path d="M104 76h92" stroke="#f4f6fb" stroke-width="6"/>
+                <path d="M200 62h22M18 66h18" stroke="#ffd600" stroke-width="8"/>
+                <g class="w"><circle cx="62" cy="88" r="21" fill="#0b0d14"/><circle cx="62" cy="88" r="9" fill="#e6ebf5"/><path d="M62 72v32M46 88h32" stroke="#aab4cc" stroke-width="4"/></g>
+                <g class="w"><circle cx="186" cy="88" r="21" fill="#0b0d14"/><circle cx="186" cy="88" r="9" fill="#e6ebf5"/><path d="M186 72v32M170 88h32" stroke="#aab4cc" stroke-width="4"/></g>
+            </g>
+        </svg></div>
+        <h1 id="loading-title">Машина в небе: полоса препятствий</h1>
+        <div id="loading-percent">0%</div>
+        <div class="loading-bar" id="loading-meter" role="progressbar" aria-label="Loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="loading-progress"></div></div>
+        <div class="loading-text" data-t="loading">Загрузка…</div>
+        <button id="loading-retry" type="button" hidden></button>
+    </div>
+
+    <!-- Порядок значим: Constants.js первым (остальные читают его глобалы), main.js последним -->
+    <script src="https://games.pikabu.ru/sdk/sdk.js"></script>
+<script src="js/Constants.js?v=1.0.2-aac24169"></script>
+    <script src="libs/simplex-noise.js?v=1.0.2-aac24169"></script>
+    <script src="libs/babylon.js?v=1.0.2-aac24169"></script>
+    <script src="js/Maps.js?v=1.0.2-aac24169"></script>
+    <script src="js/Maps2D.js?v=1.0.2-aac24169"></script>
+    <script src="js/World2D.js?v=1.0.2-aac24169"></script>
+    <script src="js/World3D.js?v=1.0.2-aac24169"></script>
+    <script src="js/Terrain3D.js?v=1.0.2-aac24169"></script>
+    <script src="js/CameraControl.js?v=1.0.2-aac24169"></script>
+    <script src="js/Model3D.js?v=1.0.2-aac24169"></script>
+    <script src="js/ModelFBX.js?v=1.0.2-aac24169"></script>
+    <script src="js/ModelOBJ.js?v=1.0.2-aac24169"></script>
+    <script src="js/ModelGLTF.js?v=1.0.2-aac24169"></script>
+    <script src="js/Location3D.js?v=1.0.2-aac24169"></script>
+    <!-- world-a: Rig.js (риги и клипы), Nav.js (коллизии, высоты, пути) -->
+    <script src="js/Rig.js?v=1.0.2-aac24169"></script>
+    <script src="js/Nav.js?v=1.0.2-aac24169"></script>
+    <!-- 1.30 мир (world-b): уровни графики и время суток -->
+    <script src="js/Quality.js?v=1.0.2-aac24169"></script>
+    <script src="js/Sky3D.js?v=1.0.2-aac24169"></script>
+    <script src="js/Pause.js?v=1.0.2-aac24169"></script>
+    <script src="js/Sound.js?v=1.0.2-aac24169"></script>
+    <script src="js/Lang.js?v=1.0.2-aac24169"></script>
+    <script src="js/Platform.js?v=1.0.2-aac24169"></script>
+    <!-- Адаптеры площадок (Platform.register): Playgama; игра добавляет свои здесь же, после Platform.js -->
+    <script src="js/PlatformPlaygama.js?v=1.0.2-aac24169"></script>
+    <!-- Адаптеры Telegram Mini App, CrazyGames, Android-обёртки и сборки test (detect() выбирает площадку) -->
+    <script src="js/PlatformTelegram.js?v=1.0.2-aac24169"></script>
+    <script src="js/PlatformCrazy.js?v=1.0.2-aac24169"></script>
+    <script src="js/PlatformPikabu.js?v=1.0.2-aac24169"></script>
+    <script src="js/PlatformAndroid.js?v=1.0.2-aac24169"></script>
+    <script src="js/PlatformTest.js?v=1.0.2-aac24169"></script>
+    <script src="js/LoadingScreen.js?v=1.0.2-aac24169"></script>
+    <script src="js/ParticleFX.js?v=1.0.2-aac24169"></script>
+    <script src="js/Telemetry.js?v=1.0.2-aac24169"></script>
+    <!-- 1.30 systems-b: магазин косметики, Daily Gift, колесо фортуны (логика без UI, опт-ин: Shop/DailyGift/Wheel.init в Game.js) -->
+    <script src="js/Shop.js?v=1.0.2-aac24169"></script>
+    <script src="js/DailyGift.js?v=1.0.2-aac24169"></script>
+    <script src="js/Wheel.js?v=1.0.2-aac24169"></script>
+    <!-- 1.30 systems-a: ввод, раскладка HUD, обучение. Opt-in: игра сама зовёт Input.init / HudLayout.init / Tutorial.init -->
+    <script src="js/HudLayout.js?v=1.0.2-aac24169"></script>
+    <script src="js/Input.js?v=1.0.2-aac24169"></script>
+    <script src="js/Tutorial.js?v=1.0.2-aac24169"></script>
+    <script src="js/LiveWater3D.js?v=1.0.2-aac24169"></script>
+    <!-- Скрипты игры (js/Game.js и её модули) — здесь, до main.js -->
+    <script src="js/GameAds.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameShopData.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameLook.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameSky.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameCourse.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameCarModels.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameCar.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameBots.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameCamera.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameHud.js?v=1.0.2-aac24169"></script>
+    <script src="js/GameMeta.js?v=1.0.2-aac24169"></script>
+    <script src="js/Game.js?v=1.0.2-aac24169"></script>
+    <script src="js/main.js?v=1.0.2-aac24169"></script>
+    <script>
+        // Игровая область: долгий тап и ПКМ не открывают меню браузера, картинки не
+        // тянутся, текст не выделяется — кроме настоящих полей ввода.
+        (() => {
+            const isField = t => t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+            for (const type of ['contextmenu', 'dragstart', 'selectstart']) {
+                document.addEventListener(type, e => { if (!isField(e.target)) e.preventDefault(); });
+            }
+        })();
+    </script>
+</body>
+</html>

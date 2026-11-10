@@ -18,7 +18,7 @@ const FX_MAX_PARTICLES = 6000;       // общий бюджет ёмкости �
 const FX_MOBILE_SCALE = 0.55;        // плотность и бюджет частиц на мобильных
 const GAME_ID = 'obby-car-master';          // латиница, цифры, -: имя архива dist/<GAME_ID>-<платформа>-<версия>.zip и ключей сохранений
 const GAME_TITLE = 'Машина в небе: полоса препятствий';     // название игры: заголовок вкладки браузера
-const GAME_VERSION = '1.0.2';         // версия билда: ?v= у скриптов (tools/build.mjs) и имя архива
+const GAME_VERSION = '1.0.3';         // версия билда: ?v= у скриптов (tools/build.mjs) и имя архива
 const GAME_PLATFORM = 'pikabu';          // 'web' | 'yandex' | 'playables' | 'playgama' | 'telegram' | 'crazygames' | 'android' | 'test' — сборка ставит свою (build.bat <платформа>)
 const GAME_LANG = 'ru';               // язык интерфейса: сборка ставит ru (yandex) или en (playables); Lang.js
 // Название игры по площадке: { <сборка>: 'Название' } — сборка ставит его в GAME_TITLE, <title> и заставку загрузки
